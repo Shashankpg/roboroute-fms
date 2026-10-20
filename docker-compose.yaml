@@ -1,0 +1,59 @@
+
+
+services:
+  # MQTT Broker for Real-time Robot Telemetry
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: fms-mqtt-broker
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+    environment:
+      - TZ=Asia/Kolkata
+
+  # PostgreSQL Database for Fleet States and Missions
+  postgres:
+    image: postgres:15-alpine
+    container_name: fms-postgres-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: fms_db
+      POSTGRES_USER: fms_user
+      POSTGRES_PASSWORD: fms_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # The Spring Boot FMS Core Application Container
+  fms-app:
+    build: .
+    container_name: fms-backend-app
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+      - mosquitto
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/fms_db
+      - FMS_MQTT_BROKER_URL=tcp://mosquitto:1883
+
+  # NEW: Embedded Robot Fleet Simulator Container
+  robot-sim:
+    image: python:3.10-alpine
+    container_name: fms-robot-simulator
+    volumes:
+      - .:/app
+    working_dir: /app
+    depends_on:
+      - mosquitto
+    # Install dependency inside the container dynamically and run the script
+    command: >
+      sh -c "pip install paho-mqtt==1.6.1 && python mock_robot.py"
+
+volumes:
+  postgres_data:
+
